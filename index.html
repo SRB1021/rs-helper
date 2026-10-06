@@ -182,7 +182,7 @@
       <button id="send">Send</button>
     </div>
     <div class="footnote">
-      Runs entirely in your browser. Your API key, documents, and memory are stored locally and sent only to Google's Gemini API. Helper decides locally when to recall memory or reference documents before calling the model.
+      Runs entirely in your browser. Your API key, documents, and memory are stored locally and sent only to Google's Gemini API. JARVIS decides locally when to recall memory or reference documents before calling the model.
     </div>
   </div>
 </div>
@@ -333,11 +333,11 @@ document.getElementById('clearChat').addEventListener('click', () => {
 });
 
 /* ---------- Local "thinking" layer ----------
-   Before calling the model, Helper does its own local reasoning:
+   Before calling the model, JARVIS does its own local reasoning:
    - decides whether this message is worth remembering as a fact
    - decides whether documents are relevant enough to attach
    - handles a few things entirely locally (no API call)
-   This keeps Helper acting on its own judgment rather than being
+   This keeps JARVIS acting on its own judgment rather than being
    a plain passthrough to the model. */
 
 function tryLocalAnswer(q) {
@@ -395,7 +395,7 @@ function addMsg(role, text, persist = true) {
   if (role !== 'system') {
     const label = document.createElement('div');
     label.className = 'label';
-    label.textContent = role === 'user' ? 'You' : 'Helper';
+    label.textContent = role === 'user' ? 'You' : 'JARVIS';
     msg.appendChild(label);
   }
   const bubble = document.createElement('div');
@@ -421,7 +421,7 @@ function bootGreeting() {
     msg.className = `msg ${h.role}`;
     const label = document.createElement('div');
     label.className = 'label';
-    label.textContent = h.role === 'user' ? 'You' : 'Helper';
+    label.textContent = h.role === 'user' ? 'You' : 'JARVIS';
     msg.appendChild(label);
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
@@ -513,7 +513,7 @@ sendBtn.addEventListener('click', async () => {
     ? memory.map(m => `- ${m.fact}`).join('\n')
     : '(nothing remembered yet)';
 
-  const systemPrompt = `You are Helper, a composed, precise, quietly witty AI assistant in the style of Tony Stark's JARVIS. Address the user respectfully (e.g. "sir"), stay concise and capable, and never break character with disclaimers about being an AI unless directly relevant. You have persistent memory of facts the user has asked you to remember, and access to documents they've shared, both listed below. Use them when relevant; don't force them in otherwise.
+  const systemPrompt = `You are JARVIS, a composed, precise, quietly witty AI assistant from the Marvel films. Address the user respectfully (e.g. "sir"), stay concise and capable, and never break character with disclaimers about being an AI unless directly relevant. You have persistent memory of facts the user has asked you to remember, and access to documents they've shared, both listed below. Use them when relevant; don't force them in otherwise.
 
 Remembered facts about the user:
 ${memoryBlock}
