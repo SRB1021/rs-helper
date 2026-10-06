@@ -2,62 +2,543 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>RS Helper</title>
+<title>Helper</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   :root {
-    --bg: #0f1115;
-    --panel: #171a21;
-    --border: #2a2f3a;
-    --text: #e8eaf0;
-    --muted: #9aa3b2;
-    --accent: #5b8def;
+    --bg: #04070a;
+    --panel: #0a1218;
+    --panel2: #0d1a22;
+    --border: #15323f;
+    --text: #cfeeff;
+    --muted: #5f8a9c;
+    --accent: #2fd8ff;
+    --accent-dim: #1a7f99;
+    --danger: #ff5c6a;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    min-height: 100vh;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: var(--bg);
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    background: radial-gradient(ellipse at top, #061018 0%, var(--bg) 60%);
     color: var(--text);
     display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 24px;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
   }
-  .wrap { max-width: 640px; width: 100%; }
-  h1 { font-size: 22px; margin: 0 0 6px; }
-  p.sub { color: var(--muted); margin: 0 0 28px; font-size: 14px; }
-  .cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-  a.card {
-    display: block;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 18px;
-    text-decoration: none;
-    color: var(--text);
-    transition: border-color .15s;
+  header .brand { display: flex; align-items: baseline; gap: 10px; }
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    text-shadow: 0 0 12px rgba(47, 216, 255, 0.5);
   }
-  a.card:hover { border-color: var(--accent); }
-  a.card h2 { font-size: 16px; margin: 0 0 6px; color: var(--accent); }
-  a.card p { font-size: 13px; color: var(--muted); margin: 0; line-height: 1.5; }
+  header .sub { font-size: 12px; color: var(--muted); }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 8px var(--accent);
+    display: inline-block; margin-right: 6px;
+  }
+  .status-dot.off { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+  header .status { font-size: 12px; color: var(--muted); display: flex; align-items: center; }
+
+  .layout { flex: 1; display: flex; min-height: 0; }
+  .sidebar {
+    width: 320px; flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    padding: 16px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 16px;
+    background: linear-gradient(180deg, var(--panel), var(--bg));
+  }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  .field label {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); display: block; margin-bottom: 6px;
+  }
+  input[type="password"], input[type="text"] {
+    width: 100%; padding: 8px 10px; border-radius: 6px;
+    border: 1px solid var(--border); background: #020608; color: var(--text);
+    font-size: 13px;
+  }
+  input:focus { outline: 1px solid var(--accent); }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .drop {
+    border: 1.5px dashed var(--border); border-radius: 8px;
+    padding: 16px 12px; text-align: center; color: var(--muted);
+    font-size: 12.5px; cursor: pointer; transition: border-color .15s, color .15s;
+  }
+  .drop.dragover { border-color: var(--accent); color: var(--text); }
+  .doc-list { display: flex; flex-direction: column; gap: 6px; }
+  .doc-item {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 7px 9px; display: flex; align-items: center; justify-content: space-between;
+    font-size: 12px;
+  }
+  .doc-item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 8px; }
+  .doc-item button { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 13px; }
+  .empty-note { font-size: 11.5px; color: var(--muted); }
+
+  .mem-list { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; }
+  .mem-item {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 9px; font-size: 11.5px; color: var(--text);
+    display: flex; justify-content: space-between; gap: 6px;
+  }
+  .mem-item button { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 12px; flex-shrink:0; }
+
+  button.ghost {
+    width: 100%; padding: 7px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel2); color: var(--text); cursor: pointer; font-size: 12.5px;
+  }
+  button.ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  .chat { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .msg { max-width: 760px; }
+  .msg.user { align-self: flex-end; }
+  .msg .bubble { padding: 10px 14px; border-radius: 10px; font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
+  .msg.user .bubble { background: var(--accent-dim); color: white; }
+  .msg.assistant .bubble { background: var(--panel2); border: 1px solid var(--border); }
+  .msg.system .bubble { background: transparent; color: var(--muted); font-style: italic; border: none; padding: 0; }
+  .msg.assistant .label, .msg.user .label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin-bottom: 4px;
+  }
+
+  .composer { border-top: 1px solid var(--border); padding: 14px 20px; display: flex; gap: 10px; }
+  .composer textarea {
+    flex: 1; resize: none; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel2); color: var(--text);
+    font-size: 14px; font-family: inherit; min-height: 44px; max-height: 160px;
+  }
+  .composer textarea:focus { outline: 1px solid var(--accent); }
+  .composer button {
+    background: var(--accent); border: none; color: #04121a; font-weight: 600;
+    padding: 0 20px; border-radius: 8px; font-size: 14px; cursor: pointer;
+  }
+  .composer button:disabled { opacity: .5; cursor: default; }
+  .footnote { font-size: 11px; color: var(--muted); padding: 0 20px 10px; }
+  a { color: var(--accent); }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>RS Helper</h1>
-    <p class="sub">Pick a tool.</p>
-    <div class="cards">
-      <a class="card" href="/document-desk/">
-        <h2>Document Desk</h2>
-        <p>Load two or more documents and ask questions answered only from their content.</p>
-      </a>
-      <a class="card" href="/jarvis/">
-        <h2>J.A.R.V.I.S.</h2>
-        <p>A personal assistant with local reasoning, persistent memory, and document awareness.</p>
-      </a>
+
+<header>
+  <div class="brand">
+    <h1>Helper</h1>
+    <span class="sub">your assistant</span>
+  </div>
+  <div class="status" id="statusLine"><span class="status-dot off" id="statusDot"></span>Standing by</div>
+</header>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="field">
+      <label for="apiKey">Gemini API key</label>
+      <input type="password" id="apiKey" placeholder="AIza..." />
+      <div class="hint">Stored only in this browser. Get a free key at <span style="color:var(--text)">aistudio.google.com/apikey</span></div>
+    </div>
+
+    <div class="field">
+      <label>Reference documents</label>
+      <div class="drop" id="drop">
+        Drop .txt / .md files here<br/>or click to browse
+        <input type="file" id="fileInput" multiple accept=".txt,.md,.csv,.json,.log" style="display:none" />
+      </div>
+      <div style="display:flex; gap:6px; margin-top:8px;">
+        <input type="text" id="urlInput" placeholder="https://example.com/article" />
+        <button class="ghost" id="addUrl" style="width:auto; padding:7px 12px; white-space:nowrap;">Add</button>
+      </div>
+      <div class="hint" id="urlStatus"></div>
+      <div class="doc-list" id="docList" style="margin-top:8px;"></div>
+      <div class="empty-note" id="emptyNote">No documents loaded.</div>
+    </div>
+
+    <div class="field">
+      <label>Memory (<span id="memCount">0</span>)</label>
+      <div class="mem-list" id="memList"></div>
+      <div class="empty-note" id="memEmptyNote">Nothing remembered yet.</div>
+      <button class="ghost" id="clearMem" style="margin-top:8px;">Clear memory</button>
+    </div>
+
+    <button class="ghost" id="clearChat">Clear conversation</button>
+  </div>
+
+  <div class="main">
+    <div class="chat" id="chat"></div>
+    <div class="composer">
+      <textarea id="question" placeholder="Speak freely, sir..." rows="1"></textarea>
+      <button id="send">Send</button>
+    </div>
+    <div class="footnote">
+      Runs entirely in your browser. Your API key, documents, and memory are stored locally and sent only to Google's Gemini API. Helper decides locally when to recall memory or reference documents before calling the model.
     </div>
   </div>
+</div>
+
+<script>
+/* ---------- Persistent state ---------- */
+const STORAGE_KEY = 'helper_state_v1';
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { history: [], memory: [] };
+    const parsed = JSON.parse(raw);
+    return { history: parsed.history || [], memory: parsed.memory || [] };
+  } catch (e) {
+    return { history: [], memory: [] };
+  }
+}
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ history, memory }));
+  } catch (e) { /* storage unavailable: degrade silently */ }
+}
+
+const state = loadState();
+let history = state.history;  // [{role:'user'|'assistant', text}]
+let memory = state.memory;    // [{fact: string, ts: number}]
+const docs = [];              // { name, text } — not persisted (re-add each session)
+
+/* ---------- DOM refs ---------- */
+const chat = document.getElementById('chat');
+const docList = document.getElementById('docList');
+const emptyNote = document.getElementById('emptyNote');
+const memList = document.getElementById('memList');
+const memCount = document.getElementById('memCount');
+const memEmptyNote = document.getElementById('memEmptyNote');
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+const questionBox = document.getElementById('question');
+const sendBtn = document.getElementById('send');
+const statusDot = document.getElementById('statusDot');
+const statusLine = document.getElementById('statusLine');
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- Documents ---------- */
+function renderDocs() {
+  docList.innerHTML = '';
+  emptyNote.style.display = docs.length ? 'none' : 'block';
+  docs.forEach((d, i) => {
+    const item = document.createElement('div');
+    item.className = 'doc-item';
+    item.innerHTML = `<span class="name" title="${escapeHtml(d.name)}">${escapeHtml(d.name)}</span>`;
+    const btn = document.createElement('button');
+    btn.textContent = '✕';
+    btn.onclick = () => { docs.splice(i, 1); renderDocs(); };
+    item.appendChild(btn);
+    docList.appendChild(item);
+  });
+}
+
+async function handleFiles(fileList) {
+  for (const file of fileList) {
+    const text = await file.text();
+    docs.push({ name: file.name, text });
+  }
+  renderDocs();
+}
+
+drop.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+drop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  drop.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+
+/* ---------- Web pages as documents ---------- */
+const urlInput = document.getElementById('urlInput');
+const addUrlBtn = document.getElementById('addUrl');
+const urlStatus = document.getElementById('urlStatus');
+
+async function fetchUrlAsText(url) {
+  // r.jina.ai fetches the page server-side and returns clean readable text,
+  // which sidesteps both CORS and messy raw HTML.
+  const readerUrl = 'https://r.jina.ai/' + url;
+  const res = await fetch(readerUrl);
+  if (!res.ok) throw new Error(`Couldn't fetch that page (${res.status}).`);
+  return (await res.text()).trim();
+}
+
+async function addUrlDoc() {
+  let url = urlInput.value.trim();
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  addUrlBtn.disabled = true;
+  urlStatus.textContent = 'Fetching page…';
+  try {
+    const text = await fetchUrlAsText(url);
+    docs.push({ name: url, text });
+    renderDocs();
+    urlInput.value = '';
+    urlStatus.textContent = '';
+  } catch (err) {
+    urlStatus.textContent = err.message || 'Failed to fetch that page.';
+  } finally {
+    addUrlBtn.disabled = false;
+  }
+}
+
+addUrlBtn.addEventListener('click', addUrlDoc);
+urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addUrlDoc(); } });
+
+/* ---------- Memory ---------- */
+function renderMemory() {
+  memList.innerHTML = '';
+  memCount.textContent = memory.length;
+  memEmptyNote.style.display = memory.length ? 'none' : 'block';
+  memory.forEach((m, i) => {
+    const item = document.createElement('div');
+    item.className = 'mem-item';
+    item.innerHTML = `<span>${escapeHtml(m.fact)}</span>`;
+    const btn = document.createElement('button');
+    btn.textContent = '✕';
+    btn.onclick = () => { memory.splice(i, 1); renderMemory(); saveState(); };
+    item.appendChild(btn);
+    memList.appendChild(item);
+  });
+}
+
+document.getElementById('clearMem').addEventListener('click', () => {
+  memory = [];
+  renderMemory();
+  saveState();
+});
+
+document.getElementById('clearChat').addEventListener('click', () => {
+  history = [];
+  chat.innerHTML = '';
+  saveState();
+  bootGreeting();
+});
+
+/* ---------- Local "thinking" layer ----------
+   Before calling the model, Helper does its own local reasoning:
+   - decides whether this message is worth remembering as a fact
+   - decides whether documents are relevant enough to attach
+   - handles a few things entirely locally (no API call)
+   This keeps Helper acting on its own judgment rather than being
+   a plain passthrough to the model. */
+
+function tryLocalAnswer(q) {
+  const lower = q.trim().toLowerCase();
+
+  if (/^(what('?s| is)? the time|current time)\b/.test(lower)) {
+    return `It is currently ${new Date().toLocaleTimeString()}, sir.`;
+  }
+  if (/^(what('?s| is)? today'?s date|current date|what day is it)\b/.test(lower)) {
+    return `Today is ${new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.`;
+  }
+  const mathMatch = lower.match(/^(calculate|compute|what('?s| is))\s+([\d\s+\-*/().]+)\??$/);
+  if (mathMatch) {
+    try {
+      // eslint-disable-next-line no-new-func
+      const result = Function(`"use strict"; return (${mathMatch[3]})`)();
+      if (typeof result === 'number' && Number.isFinite(result)) {
+        return `That comes to ${result}.`;
+      }
+    } catch (e) { /* fall through to model */ }
+  }
+  return null;
+}
+
+function extractMemorableFact(q) {
+  const patterns = [
+    /^(?:remember that|note that|keep in mind that)\s+(.+)/i,
+    /^my name is\s+(.+)/i,
+    /^i (?:like|love|prefer)\s+(.+)/i,
+    /^i (?:work|am working) (?:on|as)\s+(.+)/i,
+  ];
+  for (const p of patterns) {
+    const m = q.match(p);
+    if (m) return q.trim().replace(/\.$/, '');
+  }
+  return null;
+}
+
+function relevantDocs(q) {
+  if (docs.length === 0) return [];
+  const words = q.toLowerCase().split(/\W+/).filter(w => w.length > 3);
+  const scored = docs.map(d => {
+    const lowerText = d.text.toLowerCase();
+    const score = words.reduce((acc, w) => acc + (lowerText.includes(w) ? 1 : 0), 0);
+    return { d, score };
+  });
+  const hits = scored.filter(s => s.score > 0);
+  return (hits.length ? hits : scored).map(s => s.d);
+}
+
+/* ---------- Chat rendering ---------- */
+function addMsg(role, text, persist = true) {
+  const msg = document.createElement('div');
+  msg.className = `msg ${role}`;
+  if (role !== 'system') {
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = role === 'user' ? 'You' : 'Helper';
+    msg.appendChild(label);
+  }
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  msg.appendChild(bubble);
+  chat.appendChild(msg);
+  chat.scrollTop = chat.scrollHeight;
+  if (persist && role !== 'system') {
+    history.push({ role, text });
+    saveState();
+  }
+  return bubble;
+}
+
+function bootGreeting() {
+  const greeting = history.length === 0
+    ? "At your service. Ask me anything, hand me documents to study, or tell me something to remember."
+    : "Welcome back, sir. Picking up where we left off.";
+  addMsg('system', greeting, false);
+  history.forEach(h => {
+    const msg = document.createElement('div');
+    msg.className = `msg ${h.role}`;
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = h.role === 'user' ? 'You' : 'Helper';
+    msg.appendChild(label);
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = h.text;
+    msg.appendChild(bubble);
+    chat.appendChild(msg);
+  });
+  chat.scrollTop = chat.scrollHeight;
+}
+
+/* ---------- Gemini call ---------- */
+async function askGemini(apiKey, systemPrompt, recentHistory, question) {
+  const contents = [];
+  recentHistory.forEach(h => {
+    contents.push({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] });
+  });
+  contents.push({ role: 'user', parts: [{ text: question }] });
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: { maxOutputTokens: 1024 },
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini error ${res.status}: ${errText}`);
+  }
+  const data = await res.json();
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  return parts.map(p => p.text || '').join('').trim() || '(no response)';
+}
+
+/* ---------- Composer ---------- */
+questionBox.addEventListener('input', () => {
+  questionBox.style.height = 'auto';
+  questionBox.style.height = Math.min(questionBox.scrollHeight, 160) + 'px';
+});
+questionBox.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
+});
+
+sendBtn.addEventListener('click', async () => {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const question = questionBox.value.trim();
+  if (!question) return;
+
+  addMsg('user', question);
+  questionBox.value = '';
+  questionBox.style.height = 'auto';
+
+  // Local reasoning first: remember facts, try a local answer, no API call needed.
+  const fact = extractMemorableFact(question);
+  if (fact) {
+    memory.push({ fact, ts: Date.now() });
+    renderMemory();
+    saveState();
+  }
+
+  const localAnswer = tryLocalAnswer(question);
+  if (localAnswer) {
+    addMsg('assistant', localAnswer);
+    return;
+  }
+
+  if (!apiKey) {
+    addMsg('assistant', "I'll need a Gemini API key before I can reason beyond what I handle locally, sir.");
+    return;
+  }
+
+  sendBtn.disabled = true;
+  statusDot.classList.remove('off');
+  statusLine.innerHTML = '<span class="status-dot" id="statusDot"></span>Processing...';
+  const bubble = addMsg('assistant', 'One moment...', false);
+
+  const relevant = relevantDocs(question);
+  const docsBlock = relevant.map((d, i) =>
+    `<document name="${escapeHtml(d.name)}">\n${d.text}\n</document>`
+  ).join('\n\n');
+
+  const memoryBlock = memory.length
+    ? memory.map(m => `- ${m.fact}`).join('\n')
+    : '(nothing remembered yet)';
+
+  const systemPrompt = `You are Helper, a composed, precise, quietly witty AI assistant in the style of Tony Stark's JARVIS. Address the user respectfully (e.g. "sir"), stay concise and capable, and never break character with disclaimers about being an AI unless directly relevant. You have persistent memory of facts the user has asked you to remember, and access to documents they've shared, both listed below. Use them when relevant; don't force them in otherwise.
+
+Remembered facts about the user:
+${memoryBlock}
+
+${relevant.length ? `Reference documents:\n${docsBlock}` : 'No documents are currently relevant to this message.'}`;
+
+  try {
+    const recentHistory = history.slice(-20, -1); // exclude the message just pushed
+    const answer = await askGemini(apiKey, systemPrompt, recentHistory, question);
+    bubble.textContent = answer;
+    history.push({ role: 'assistant', text: answer });
+    saveState();
+  } catch (err) {
+    bubble.textContent = `I've run into a problem reaching the model: ${err.message}`;
+  } finally {
+    sendBtn.disabled = false;
+    statusLine.innerHTML = '<span class="status-dot off" id="statusDot"></span>Standing by';
+  }
+});
+
+/* ---------- Boot ---------- */
+renderDocs();
+renderMemory();
+bootGreeting();
+</script>
+
 </body>
 </html>
