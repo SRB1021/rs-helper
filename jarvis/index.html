@@ -156,6 +156,11 @@
         Drop .txt / .md files here<br/>or click to browse
         <input type="file" id="fileInput" multiple accept=".txt,.md,.csv,.json,.log" style="display:none" />
       </div>
+      <div style="display:flex; gap:6px; margin-top:8px;">
+        <input type="text" id="urlInput" placeholder="https://example.com/article" />
+        <button class="ghost" id="addUrl" style="width:auto; padding:7px 12px; white-space:nowrap;">Add</button>
+      </div>
+      <div class="hint" id="urlStatus"></div>
       <div class="doc-list" id="docList" style="margin-top:8px;"></div>
       <div class="empty-note" id="emptyNote">No documents loaded.</div>
     </div>
@@ -259,6 +264,43 @@ drop.addEventListener('drop', (e) => {
   drop.classList.remove('dragover');
   handleFiles(e.dataTransfer.files);
 });
+
+/* ---------- Web pages as documents ---------- */
+const urlInput = document.getElementById('urlInput');
+const addUrlBtn = document.getElementById('addUrl');
+const urlStatus = document.getElementById('urlStatus');
+
+async function fetchUrlAsText(url) {
+  // r.jina.ai fetches the page server-side and returns clean readable text,
+  // which sidesteps both CORS and messy raw HTML.
+  const readerUrl = 'https://r.jina.ai/' + url;
+  const res = await fetch(readerUrl);
+  if (!res.ok) throw new Error(`Couldn't fetch that page (${res.status}).`);
+  return (await res.text()).trim();
+}
+
+async function addUrlDoc() {
+  let url = urlInput.value.trim();
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  addUrlBtn.disabled = true;
+  urlStatus.textContent = 'Fetching page…';
+  try {
+    const text = await fetchUrlAsText(url);
+    docs.push({ name: url, text });
+    renderDocs();
+    urlInput.value = '';
+    urlStatus.textContent = '';
+  } catch (err) {
+    urlStatus.textContent = err.message || 'Failed to fetch that page.';
+  } finally {
+    addUrlBtn.disabled = false;
+  }
+}
+
+addUrlBtn.addEventListener('click', addUrlDoc);
+urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addUrlDoc(); } });
 
 /* ---------- Memory ---------- */
 function renderMemory() {

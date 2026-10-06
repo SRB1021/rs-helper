@@ -183,6 +183,15 @@
     </div>
 
     <div class="field">
+      <label for="urlInput">...or add a webpage by URL</label>
+      <div style="display:flex; gap:6px;">
+        <input type="text" id="urlInput" placeholder="https://example.com/article" />
+        <button id="addUrl" style="padding:7px 12px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer; white-space:nowrap;">Add</button>
+      </div>
+      <div class="hint" id="urlStatus" style="font-size:11px; color:var(--muted); margin-top:4px;"></div>
+    </div>
+
+    <div class="field">
       <label for="pasteBox">...or paste text as a document</label>
       <textarea id="pasteBox" rows="4" style="width:100%; resize:vertical; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:#0c0e12; color:var(--text); font-size:13px; font-family:inherit;" placeholder="Paste text, then name it below"></textarea>
       <input type="text" id="pasteName" placeholder="Document name" style="margin-top:6px;" />
@@ -257,6 +266,39 @@ drop.addEventListener('drop', (e) => {
   drop.classList.remove('dragover');
   handleFiles(e.dataTransfer.files);
 });
+
+const urlInput = document.getElementById('urlInput');
+const addUrlBtn = document.getElementById('addUrl');
+const urlStatus = document.getElementById('urlStatus');
+
+async function fetchUrlAsText(url) {
+  const res = await fetch('https://r.jina.ai/' + url);
+  if (!res.ok) throw new Error(`Couldn't fetch that page (${res.status}).`);
+  return (await res.text()).trim();
+}
+
+async function addUrlDoc() {
+  let url = urlInput.value.trim();
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  addUrlBtn.disabled = true;
+  urlStatus.textContent = 'Fetching page...';
+  try {
+    const text = await fetchUrlAsText(url);
+    docs.push({ name: url, text });
+    renderDocs();
+    urlInput.value = '';
+    urlStatus.textContent = '';
+  } catch (err) {
+    urlStatus.textContent = err.message || 'Failed to fetch that page.';
+  } finally {
+    addUrlBtn.disabled = false;
+  }
+}
+
+addUrlBtn.addEventListener('click', addUrlDoc);
+urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addUrlDoc(); } });
 
 document.getElementById('addPaste').addEventListener('click', () => {
   const text = document.getElementById('pasteBox').value.trim();
