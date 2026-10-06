@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: document-desk
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: ./document-desk
+    routes:
+      - type: rewrite
+        source: /
+        destination: /standalone.html
