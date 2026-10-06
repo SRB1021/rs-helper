@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Multi-Document Q&A</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2f3a;
+    --text: #e8eaf0;
+    --muted: #9aa3b2;
+    --accent: #5b8def;
+    --accent-hover: #4a7adb;
+    --danger: #e05c5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+  }
+  header .sub {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .layout {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+  }
+  .sidebar {
+    width: 320px;
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .field label {
+    font-size: 12px;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 6px;
+  }
+  input[type="password"], input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #0c0e12;
+    color: var(--text);
+    font-size: 13px;
+  }
+  .drop {
+    border: 1.5px dashed var(--border);
+    border-radius: 8px;
+    padding: 18px 12px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .drop.dragover { border-color: var(--accent); color: var(--text); }
+  .doc-list { display: flex; flex-direction: column; gap: 8px; }
+  .doc-item {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12.5px;
+  }
+  .doc-item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 8px; }
+  .doc-item button {
+    background: none; border: none; color: var(--danger); cursor: pointer; font-size: 14px;
+  }
+  .empty-note { font-size: 12.5px; color: var(--muted); }
+  .chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .msg { max-width: 760px; }
+  .msg.user { align-self: flex-end; }
+  .msg .bubble {
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  .msg.user .bubble { background: var(--accent); color: white; }
+  .msg.assistant .bubble { background: var(--panel); border: 1px solid var(--border); }
+  .msg.system .bubble { background: transparent; color: var(--muted); font-style: italic; border: none; padding: 0; }
+  .composer {
+    border-top: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    gap: 10px;
+  }
+  .composer textarea {
+    flex: 1;
+    resize: none;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+    min-height: 44px;
+    max-height: 160px;
+  }
+  .composer button {
+    background: var(--accent);
+    border: none;
+    color: white;
+    padding: 0 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .composer button:disabled { opacity: .5; cursor: default; }
+  .composer button:hover:not(:disabled) { background: var(--accent-hover); }
+  .footnote { font-size: 11px; color: var(--muted); padding: 0 20px 10px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Multi-Document Q&A</h1>
+    <div class="sub">Add two or more documents, then ask questions about them.</div>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="field">
+      <label for="apiKey">Anthropic API key</label>
+      <input type="password" id="apiKey" placeholder="sk-ant-..." />
+    </div>
+
+    <div class="field">
+      <label>Documents</label>
+      <div class="drop" id="drop">
+        Drop .txt / .md files here<br/>or click to browse
+        <input type="file" id="fileInput" multiple accept=".txt,.md,.csv,.json,.log" style="display:none" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="pasteBox">...or paste text as a document</label>
+      <textarea id="pasteBox" rows="4" style="width:100%; resize:vertical; padding:8px 10px; border-radius:6px; border:1px solid var(--border); background:#0c0e12; color:var(--text); font-size:13px; font-family:inherit;" placeholder="Paste text, then name it below"></textarea>
+      <input type="text" id="pasteName" placeholder="Document name" style="margin-top:6px;" />
+      <button id="addPaste" style="margin-top:8px; width:100%; padding:7px; border-radius:6px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer;">Add pasted text</button>
+    </div>
+
+    <div class="field">
+      <label>Loaded documents (<span id="docCount">0</span>)</label>
+      <div class="doc-list" id="docList"></div>
+      <div class="empty-note" id="emptyNote">No documents yet.</div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="chat" id="chat">
+      <div class="msg system"><div class="bubble">Add at least two documents on the left, enter your Anthropic API key, then ask a question below.</div></div>
+    </div>
+    <div class="composer">
+      <textarea id="question" placeholder="Ask a question about your documents..." rows="1"></textarea>
+      <button id="send">Ask</button>
+    </div>
+    <div class="footnote">
+      Runs entirely in your browser. Your API key and documents are sent directly to Anthropic's API and never touch any other server. PDF/Word files aren't parsed here — convert them to .txt first, or paste the text in.
+    </div>
+  </div>
+</div>
+
+<script>
+const docs = []; // { name, text }
+
+const docList = document.getElementById('docList');
+const docCount = document.getElementById('docCount');
+const emptyNote = document.getElementById('emptyNote');
+const chat = document.getElementById('chat');
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+
+function renderDocs() {
+  docList.innerHTML = '';
+  docCount.textContent = docs.length;
+  emptyNote.style.display = docs.length ? 'none' : 'block';
+  docs.forEach((d, i) => {
+    const item = document.createElement('div');
+    item.className = 'doc-item';
+    item.innerHTML = `<span class="name" title="${escapeHtml(d.name)}">${escapeHtml(d.name)} (${d.text.length.toLocaleString()} chars)</span>`;
+    const btn = document.createElement('button');
+    btn.textContent = '✕';
+    btn.onclick = () => { docs.splice(i, 1); renderDocs(); };
+    item.appendChild(btn);
+    docList.appendChild(item);
+  });
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function handleFiles(fileList) {
+  for (const file of fileList) {
+    const text = await file.text();
+    docs.push({ name: file.name, text });
+  }
+  renderDocs();
+}
+
+drop.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('dragover'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+drop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  drop.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+
+document.getElementById('addPaste').addEventListener('click', () => {
+  const text = document.getElementById('pasteBox').value.trim();
+  const name = document.getElementById('pasteName').value.trim() || `Pasted document ${docs.length + 1}`;
+  if (!text) return;
+  docs.push({ name, text });
+  document.getElementById('pasteBox').value = '';
+  document.getElementById('pasteName').value = '';
+  renderDocs();
+});
+
+function addMsg(role, text) {
+  const msg = document.createElement('div');
+  msg.className = `msg ${role}`;
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  msg.appendChild(bubble);
+  chat.appendChild(msg);
+  chat.scrollTop = chat.scrollHeight;
+  return bubble;
+}
+
+const questionBox = document.getElementById('question');
+const sendBtn = document.getElementById('send');
+
+questionBox.addEventListener('input', () => {
+  questionBox.style.height = 'auto';
+  questionBox.style.height = Math.min(questionBox.scrollHeight, 160) + 'px';
+});
+questionBox.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
+});
+
+sendBtn.addEventListener('click', async () => {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const question = questionBox.value.trim();
+
+  if (!apiKey) { alert('Enter your Anthropic API key first.'); return; }
+  if (docs.length < 2) { alert('Add at least two documents first.'); return; }
+  if (!question) return;
+
+  addMsg('user', question);
+  questionBox.value = '';
+  questionBox.style.height = 'auto';
+  sendBtn.disabled = true;
+  const bubble = addMsg('assistant', 'Thinking...');
+
+  const docsBlock = docs.map((d, i) =>
+    `<document index="${i + 1}" name="${escapeHtml(d.name)}">\n${d.text}\n</document>`
+  ).join('\n\n');
+
+  const systemPrompt = `You are answering questions about the documents the user has provided. Base your answers only on the content of these documents. When relevant, say which document(s) your answer comes from. If the answer isn't in the documents, say so clearly rather than guessing.\n\n${docsBlock}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-5',
+        max_tokens: 1500,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: question }],
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      bubble.textContent = `Error ${res.status}: ${errText}`;
+    } else {
+      const data = await res.json();
+      const answer = (data.content || []).map(block => block.text || '').join('\n').trim();
+      bubble.textContent = answer || '(no response)';
+    }
+  } catch (err) {
+    bubble.textContent = `Request failed: ${err.message}`;
+  } finally {
+    sendBtn.disabled = false;
+  }
+});
+
+renderDocs();
+</script>
+
+</body>
+</html>
