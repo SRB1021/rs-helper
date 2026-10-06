@@ -145,12 +145,6 @@
 <div class="layout">
   <div class="sidebar">
     <div class="field">
-      <label for="apiKey">Gemini API key</label>
-      <input type="password" id="apiKey" placeholder="AIza..." />
-      <div class="hint">Stored only in this browser. Get a free key at <span style="color:var(--text)">aistudio.google.com/apikey</span></div>
-    </div>
-
-    <div class="field">
       <label>Reference documents</label>
       <div class="drop" id="drop">
         Drop .txt / .md files here<br/>or click to browse
@@ -182,12 +176,20 @@
       <button id="send">Send</button>
     </div>
     <div class="footnote">
-      Runs entirely in your browser. Your API key, documents, and memory are stored locally and sent only to Google's Gemini API. JARVIS decides locally when to recall memory or reference documents before calling the model.
+      Runs entirely in your browser. Documents and memory are stored locally and sent only to Google's Gemini API. JARVIS decides locally when to recall memory or reference documents before calling the model.
     </div>
   </div>
 </div>
 
 <script>
+/* ---------- Shared API key -----------------------------------------
+   Everyone who opens this page uses this one key, so you only set it
+   up once. It lives in the page source, which means anyone with the
+   link can view it (page source / browser dev tools) and use it
+   themselves against your Gemini quota. Only set this if you're okay
+   with that for who you're sharing the link with. */
+const SHARED_GEMINI_API_KEY = "PASTE_YOUR_GEMINI_API_KEY_HERE";
+
 /* ---------- Persistent state ---------- */
 const STORAGE_KEY = 'helper_state_v1';
 
@@ -472,7 +474,7 @@ questionBox.addEventListener('keydown', (e) => {
 });
 
 sendBtn.addEventListener('click', async () => {
-  const apiKey = document.getElementById('apiKey').value.trim();
+  const apiKey = SHARED_GEMINI_API_KEY;
   const question = questionBox.value.trim();
   if (!question) return;
 
@@ -494,8 +496,8 @@ sendBtn.addEventListener('click', async () => {
     return;
   }
 
-  if (!apiKey) {
-    addMsg('assistant', "I'll need a Gemini API key before I can reason beyond what I handle locally, sir.");
+  if (!apiKey || apiKey === "PASTE_YOUR_GEMINI_API_KEY_HERE") {
+    addMsg('assistant', "No API key has been set up for this page yet, sir. Whoever runs this site needs to add one.");
     return;
   }
 
