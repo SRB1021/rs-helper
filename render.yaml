@@ -1,10 +1,6 @@
 services:
   - type: web
-    name: document-desk
+    name: rs-helper
     runtime: static
     buildCommand: ""
-    staticPublishPath: ./document-desk
-    routes:
-      - type: rewrite
-        source: /
-        destination: /standalone.html
+    staticPublishPath: .
