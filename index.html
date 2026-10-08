@@ -131,6 +131,7 @@
   .footnote { font-size: 11px; color: var(--muted); padding: 0 20px 10px; }
   a { color: var(--accent); }
 </style>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -164,6 +165,15 @@
       <div class="mem-list" id="memList"></div>
       <div class="empty-note" id="memEmptyNote">Nothing remembered yet.</div>
       <button class="ghost" id="clearMem" style="margin-top:8px;">Clear memory</button>
+    </div>
+
+    <div class="field">
+      <label>Google Docs</label>
+      <button class="ghost" id="connectGoogle">Connect Google</button>
+      <div class="hint" id="googleStatus">Not connected.</div>
+      <input type="text" id="docUrlInput" placeholder="https://docs.google.com/document/d/..." style="margin-top:8px;" />
+      <button class="ghost" id="answerDoc" style="margin-top:8px;">Answer questions in this Doc</button>
+      <div class="hint" id="docAnswerStatus"></div>
     </div>
 
     <button class="ghost" id="clearChat">Clear conversation</button>
@@ -295,6 +305,157 @@ async function addUrlDoc() {
 
 addUrlBtn.addEventListener('click', addUrlDoc);
 urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addUrlDoc(); } });
+
+/* ---------- Google Docs: answer questions directly in a Doc ----------
+   Uses Google Identity Services for OAuth (the Client ID below is
+   meant to be public in browser code, unlike an API key) and the
+   Docs API to read a document, find lines that look like questions,
+   ask JARVIS for each answer, then write the answers back in. */
+
+// Fill this in with your own OAuth Client ID from Google Cloud Console
+// (APIs & Services > Credentials > Create OAuth client ID > Web application).
+const GOOGLE_CLIENT_ID = "PASTE_YOUR_GOOGLE_OAUTH_CLIENT_ID_HERE";
+
+const connectGoogleBtn = document.getElementById('connectGoogle');
+const googleStatus = document.getElementById('googleStatus');
+const docUrlInput = document.getElementById('docUrlInput');
+const answerDocBtn = document.getElementById('answerDoc');
+const docAnswerStatus = document.getElementById('docAnswerStatus');
+
+let googleAccessToken = null;
+let tokenClient = null;
+
+function initGoogleAuth() {
+  if (!window.google || GOOGLE_CLIENT_ID === "PASTE_YOUR_GOOGLE_OAUTH_CLIENT_ID_HERE") return;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/documents',
+    callback: (resp) => {
+      if (resp.error) {
+        googleStatus.textContent = `Connection failed: ${resp.error}`;
+        return;
+      }
+      googleAccessToken = resp.access_token;
+      googleStatus.textContent = 'Connected to Google.';
+    },
+  });
+}
+window.addEventListener('load', initGoogleAuth);
+
+connectGoogleBtn.addEventListener('click', () => {
+  if (GOOGLE_CLIENT_ID === "PASTE_YOUR_GOOGLE_OAUTH_CLIENT_ID_HERE") {
+    googleStatus.textContent = 'Google sign-in has not been set up for this page yet.';
+    return;
+  }
+  if (!tokenClient) initGoogleAuth();
+  tokenClient?.requestAccessToken();
+});
+
+function extractDocId(input) {
+  const trimmed = input.trim();
+  const match = trimmed.match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
+  if (match) return match[1];
+  if (/^[a-zA-Z0-9_-]+$/.test(trimmed)) return trimmed;
+  return null;
+}
+
+function isQuestion(text) {
+  const t = text.trim();
+  if (!t) return false;
+  return /\?\s*$/.test(t) || /^\s*(Q\d*[:.)]|Question\b)/i.test(t);
+}
+
+async function fetchDoc(docId) {
+  const res = await fetch(`https://docs.googleapis.com/v1/documents/${docId}`, {
+    headers: { Authorization: `Bearer ${googleAccessToken}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Couldn't open that Doc (${res.status}).`);
+  }
+  return res.json();
+}
+
+function findQuestionParagraphs(doc) {
+  const questions = [];
+  const content = doc.body?.content || [];
+  for (const el of content) {
+    if (!el.paragraph) continue;
+    const text = (el.paragraph.elements || [])
+      .map(e => e.textRun?.content || '')
+      .join('');
+    if (isQuestion(text)) {
+      questions.push({ text: text.trim(), endIndex: el.endIndex });
+    }
+  }
+  return questions;
+}
+
+async function answerDocQuestions() {
+  if (!googleAccessToken) {
+    docAnswerStatus.textContent = 'Connect Google first.';
+    return;
+  }
+  const docId = extractDocId(docUrlInput.value);
+  if (!docId) {
+    docAnswerStatus.textContent = "That doesn't look like a Google Doc link.";
+    return;
+  }
+
+  answerDocBtn.disabled = true;
+  try {
+    docAnswerStatus.textContent = 'Reading the document...';
+    const doc = await fetchDoc(docId);
+    const questions = findQuestionParagraphs(doc);
+    if (questions.length === 0) {
+      docAnswerStatus.textContent = "Didn't find any lines that look like questions (ending in '?' or starting with 'Q:').";
+      return;
+    }
+
+    docAnswerStatus.textContent = `Found ${questions.length} question(s). Answering...`;
+    const answered = [];
+    for (const q of questions) {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemPrompt: 'Answer the question directly and concisely, suitable for inserting as a written answer under the question in a document. No preamble.',
+          contents: [{ role: 'user', parts: [{ text: q.text }] }],
+        }),
+      });
+      const data = await res.json();
+      answered.push({ endIndex: q.endIndex, answer: res.ok ? (data.answer || '') : `[Error: ${data.error || 'failed'}]` });
+    }
+
+    // Insert from bottom to top so earlier indices stay valid.
+    answered.sort((a, b) => b.endIndex - a.endIndex);
+    const requests = answered.map(a => ({
+      insertText: { location: { index: a.endIndex - 1 }, text: `A: ${a.answer}\n` },
+    }));
+
+    docAnswerStatus.textContent = 'Writing answers into the document...';
+    const updateRes = await fetch(`https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${googleAccessToken}`,
+      },
+      body: JSON.stringify({ requests }),
+    });
+    if (!updateRes.ok) {
+      const err = await updateRes.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Couldn't write to the document (${updateRes.status}).`);
+    }
+
+    docAnswerStatus.textContent = `Done — answered ${questions.length} question(s) in the document.`;
+  } catch (err) {
+    docAnswerStatus.textContent = err.message || 'Something went wrong.';
+  } finally {
+    answerDocBtn.disabled = false;
+  }
+}
+
+answerDocBtn.addEventListener('click', answerDocQuestions);
 
 /* ---------- Memory ---------- */
 function renderMemory() {
