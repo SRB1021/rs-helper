@@ -171,8 +171,13 @@
       <label>Google Docs</label>
       <button class="ghost" id="connectGoogle">Connect Google</button>
       <div class="hint" id="googleStatus">Not connected.</div>
-      <input type="text" id="docUrlInput" placeholder="https://docs.google.com/document/d/..." style="margin-top:8px;" />
-      <button class="ghost" id="answerDoc" style="margin-top:8px;">Answer questions in this Doc</button>
+      <div style="display:flex; gap:6px; margin-top:8px;">
+        <input type="text" id="docUrlInput" placeholder="https://docs.google.com/document/d/..." />
+        <button class="ghost" id="addDoc" style="width:auto; padding:7px 12px; white-space:nowrap;">Add</button>
+      </div>
+      <div class="doc-list" id="googleDocList" style="margin-top:8px;"></div>
+      <div class="empty-note" id="googleDocEmptyNote">No Docs added.</div>
+      <button class="ghost" id="answerDoc" style="margin-top:8px;">Answer questions in all Docs</button>
       <div class="hint" id="docAnswerStatus"></div>
     </div>
 
@@ -319,11 +324,47 @@ const GOOGLE_CLIENT_ID = "807174487541-3r6bvjqkkgv92vb82pm1pnpss461m6ts.apps.goo
 const connectGoogleBtn = document.getElementById('connectGoogle');
 const googleStatus = document.getElementById('googleStatus');
 const docUrlInput = document.getElementById('docUrlInput');
+const addDocBtn = document.getElementById('addDoc');
+const googleDocList = document.getElementById('googleDocList');
+const googleDocEmptyNote = document.getElementById('googleDocEmptyNote');
 const answerDocBtn = document.getElementById('answerDoc');
 const docAnswerStatus = document.getElementById('docAnswerStatus');
 
 let googleAccessToken = null;
 let tokenClient = null;
+const googleDocs = []; // { id, label }
+
+function renderGoogleDocs() {
+  googleDocList.innerHTML = '';
+  googleDocEmptyNote.style.display = googleDocs.length ? 'none' : 'block';
+  googleDocs.forEach((d, i) => {
+    const item = document.createElement('div');
+    item.className = 'doc-item';
+    item.innerHTML = `<span class="name" title="${d.label}">${d.label}</span>`;
+    const btn = document.createElement('button');
+    btn.textContent = '✕';
+    btn.onclick = () => { googleDocs.splice(i, 1); renderGoogleDocs(); };
+    item.appendChild(btn);
+    googleDocList.appendChild(item);
+  });
+}
+
+addDocBtn.addEventListener('click', () => {
+  const id = extractDocId(docUrlInput.value);
+  if (!id) {
+    docAnswerStatus.textContent = "That doesn't look like a Google Doc link.";
+    return;
+  }
+  if (googleDocs.some(d => d.id === id)) {
+    docAnswerStatus.textContent = 'That Doc is already in the list.';
+    return;
+  }
+  googleDocs.push({ id, label: docUrlInput.value.trim() });
+  docUrlInput.value = '';
+  docAnswerStatus.textContent = '';
+  renderGoogleDocs();
+});
+docUrlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addDocBtn.click(); } });
 
 function initGoogleAuth() {
   if (!window.google || GOOGLE_CLIENT_ID === "PASTE_YOUR_GOOGLE_OAUTH_CLIENT_ID_HERE") return;
@@ -391,63 +432,81 @@ function findQuestionParagraphs(doc) {
   return questions;
 }
 
+async function answerQuestionsInDoc(docId) {
+  const doc = await fetchDoc(docId);
+  const questions = findQuestionParagraphs(doc);
+  if (questions.length === 0) {
+    return { answered: 0, skipped: true };
+  }
+
+  const answered = [];
+  for (const q of questions) {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemPrompt: 'Answer the question directly and concisely, suitable for inserting as a written answer under the question in a document. No preamble.',
+        contents: [{ role: 'user', parts: [{ text: q.text }] }],
+      }),
+    });
+    const data = await res.json();
+    answered.push({ endIndex: q.endIndex, answer: res.ok ? (data.answer || '') : `[Error: ${data.error || 'failed'}]` });
+  }
+
+  // Insert from bottom to top so earlier indices stay valid.
+  answered.sort((a, b) => b.endIndex - a.endIndex);
+  const requests = answered.map(a => ({
+    insertText: { location: { index: a.endIndex - 1 }, text: `A: ${a.answer}\n` },
+  }));
+
+  const updateRes = await fetch(`https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${googleAccessToken}`,
+    },
+    body: JSON.stringify({ requests }),
+  });
+  if (!updateRes.ok) {
+    const err = await updateRes.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Couldn't write to the document (${updateRes.status}).`);
+  }
+
+  return { answered: questions.length, skipped: false };
+}
+
 async function answerDocQuestions() {
   if (!googleAccessToken) {
     docAnswerStatus.textContent = 'Connect Google first.';
     return;
   }
-  const docId = extractDocId(docUrlInput.value);
-  if (!docId) {
-    docAnswerStatus.textContent = "That doesn't look like a Google Doc link.";
+  if (googleDocs.length === 0) {
+    docAnswerStatus.textContent = 'Add at least one Doc first.';
     return;
   }
 
   answerDocBtn.disabled = true;
   try {
-    docAnswerStatus.textContent = 'Reading the document...';
-    const doc = await fetchDoc(docId);
-    const questions = findQuestionParagraphs(doc);
-    if (questions.length === 0) {
-      docAnswerStatus.textContent = "Didn't find any lines that look like questions (ending in '?' or starting with 'Q:').";
-      return;
+    let totalAnswered = 0;
+    let docsWithNoQuestions = 0;
+    for (let i = 0; i < googleDocs.length; i++) {
+      const doc = googleDocs[i];
+      docAnswerStatus.textContent = `Doc ${i + 1} of ${googleDocs.length}: reading...`;
+      try {
+        const result = await answerQuestionsInDoc(doc.id);
+        if (result.skipped) {
+          docsWithNoQuestions++;
+        } else {
+          totalAnswered += result.answered;
+        }
+      } catch (err) {
+        docAnswerStatus.textContent = `Doc ${i + 1} of ${googleDocs.length} failed: ${err.message}`;
+      }
     }
 
-    docAnswerStatus.textContent = `Found ${questions.length} question(s). Answering...`;
-    const answered = [];
-    for (const q of questions) {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemPrompt: 'Answer the question directly and concisely, suitable for inserting as a written answer under the question in a document. No preamble.',
-          contents: [{ role: 'user', parts: [{ text: q.text }] }],
-        }),
-      });
-      const data = await res.json();
-      answered.push({ endIndex: q.endIndex, answer: res.ok ? (data.answer || '') : `[Error: ${data.error || 'failed'}]` });
-    }
-
-    // Insert from bottom to top so earlier indices stay valid.
-    answered.sort((a, b) => b.endIndex - a.endIndex);
-    const requests = answered.map(a => ({
-      insertText: { location: { index: a.endIndex - 1 }, text: `A: ${a.answer}\n` },
-    }));
-
-    docAnswerStatus.textContent = 'Writing answers into the document...';
-    const updateRes = await fetch(`https://docs.googleapis.com/v1/documents/${docId}:batchUpdate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${googleAccessToken}`,
-      },
-      body: JSON.stringify({ requests }),
-    });
-    if (!updateRes.ok) {
-      const err = await updateRes.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Couldn't write to the document (${updateRes.status}).`);
-    }
-
-    docAnswerStatus.textContent = `Done — answered ${questions.length} question(s) in the document.`;
+    const parts = [`Done — answered ${totalAnswered} question(s) across ${googleDocs.length} Doc(s).`];
+    if (docsWithNoQuestions) parts.push(`${docsWithNoQuestions} Doc(s) had no questions found.`);
+    docAnswerStatus.textContent = parts.join(' ');
   } catch (err) {
     docAnswerStatus.textContent = err.message || 'Something went wrong.';
   } finally {
