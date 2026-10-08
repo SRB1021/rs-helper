@@ -182,14 +182,6 @@
 </div>
 
 <script>
-/* ---------- Shared API key -----------------------------------------
-   Everyone who opens this page uses this one key, so you only set it
-   up once. It lives in the page source, which means anyone with the
-   link can view it (page source / browser dev tools) and use it
-   themselves against your Gemini quota. Only set this if you're okay
-   with that for who you're sharing the link with. */
-const SHARED_GEMINI_API_KEY = "PASTE_YOUR_GEMINI_API_KEY_HERE";
-
 /* ---------- Persistent state ---------- */
 const STORAGE_KEY = 'helper_state_v1';
 
@@ -434,34 +426,25 @@ function bootGreeting() {
   chat.scrollTop = chat.scrollHeight;
 }
 
-/* ---------- Gemini call ---------- */
-async function askGemini(apiKey, systemPrompt, recentHistory, question) {
+/* ---------- Gemini call (via our own server, which holds the key) ---------- */
+async function askGemini(systemPrompt, recentHistory, question) {
   const contents = [];
   recentHistory.forEach(h => {
     contents.push({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] });
   });
   contents.push({ role: 'user', parts: [{ text: question }] });
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents,
-        generationConfig: { maxOutputTokens: 1024 },
-      }),
-    }
-  );
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ systemPrompt, contents }),
+  });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Gemini error ${res.status}: ${errText}`);
-  }
   const data = await res.json();
-  const parts = data.candidates?.[0]?.content?.parts || [];
-  return parts.map(p => p.text || '').join('').trim() || '(no response)';
+  if (!res.ok) {
+    throw new Error(data.error || `Server error ${res.status}`);
+  }
+  return data.answer || '(no response)';
 }
 
 /* ---------- Composer ---------- */
@@ -474,7 +457,6 @@ questionBox.addEventListener('keydown', (e) => {
 });
 
 sendBtn.addEventListener('click', async () => {
-  const apiKey = SHARED_GEMINI_API_KEY;
   const question = questionBox.value.trim();
   if (!question) return;
 
@@ -493,11 +475,6 @@ sendBtn.addEventListener('click', async () => {
   const localAnswer = tryLocalAnswer(question);
   if (localAnswer) {
     addMsg('assistant', localAnswer);
-    return;
-  }
-
-  if (!apiKey || apiKey === "PASTE_YOUR_GEMINI_API_KEY_HERE") {
-    addMsg('assistant', "No API key has been set up for this page yet, sir. Whoever runs this site needs to add one.");
     return;
   }
 
@@ -524,7 +501,7 @@ ${relevant.length ? `Reference documents:\n${docsBlock}` : 'No documents are cur
 
   try {
     const recentHistory = history.slice(-20, -1); // exclude the message just pushed
-    const answer = await askGemini(apiKey, systemPrompt, recentHistory, question);
+    const answer = await askGemini(systemPrompt, recentHistory, question);
     bubble.textContent = answer;
     history.push({ role: 'assistant', text: answer });
     saveState();
